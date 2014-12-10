@@ -230,7 +230,6 @@ public:
   DeletingState(const pair<spg_t, PGRef> &in) :
     lock("DeletingState::lock"), status(QUEUED), stop_deleting(false),
     pgid(in.first), old_pg_state(in.second) {
-      old_pg_state->get_colls(&colls_to_remove);
     }
 
   /// transition status to CLEARING_WAITING
