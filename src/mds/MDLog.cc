@@ -847,7 +847,9 @@ void MDLog::_recovery_thread(MDSInternalContextBase *completion)
   } else if (read_result != 0) {
     mds->clog->error() << "failed to read JournalPointer: " << read_result
                        << " (" << cpp_strerror(read_result) << ")";
+    mds->mds_lock.Lock();
     mds->damaged();
+    mds->mds_lock.Unlock();
     assert(0);  // Should be unreachable because damaged() calls respawn()
   }
 
