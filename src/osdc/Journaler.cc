@@ -832,7 +832,20 @@ void Journaler::_finish_read(int r, uint64_t offset, bufferlist& bl)
   ldout(cct, 10) << "_finish_read got " << offset << "~" << bl.length() << dendl;
   prefetch_buf[offset].swap(bl);
 
-  _assimilate_prefetch();
+  try {
+    _assimilate_prefetch();
+  } catch (const buffer::error &err) {
+    // If there is junk in the data read, the ::_is_readable call inside
+    // _assimilate_prefetch will be the first to hit it.  Subsequent
+    // calls to _is_readable don't have to worry about catching this.
+    error = -EINVAL;
+    if (on_readable) {
+      C_OnFinisher *f = on_readable;
+      on_readable = 0;
+      f->complete(error);
+    }
+    return;
+  }
   _prefetch();
 }
 
