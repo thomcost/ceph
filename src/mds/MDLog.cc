@@ -1150,7 +1150,9 @@ void MDLog::_replay_thread()
           r = -EAGAIN;
         } else {
           mds->clog->error() << "missing journal object";
+          mds->mds_lock.Lock();
           mds->damaged();
+          mds->mds_lock.Unlock();
           assert(0);  // Should be unreachable because damaged() calls respawn()
         }
       } else if (r == -EINVAL) {
@@ -1161,7 +1163,9 @@ void MDLog::_replay_thread()
             r = -EAGAIN;
           } else {
             mds->clog->error() << "invalid journaler offsets";
+            mds->mds_lock.Lock();
             mds->damaged();
+            mds->mds_lock.Unlock();
             assert(0);  // Should be unreachable because damaged() calls respawn()
           }
         } else {
@@ -1184,7 +1188,9 @@ void MDLog::_replay_thread()
                         << dendl;
 
                 mds->clog->error() << "error reading journal header";
+                mds->mds_lock.Lock();
                 mds->damaged();
+                mds->mds_lock.Unlock();
                 assert(0);  // Should be unreachable because damaged() calls
                             // respawn()
             }
@@ -1228,7 +1234,9 @@ void MDLog::_replay_thread()
       if (g_conf->mds_log_skip_corrupt_events) {
         continue;
       } else {
+        mds->mds_lock.Lock();
         mds->damaged();
+        mds->mds_lock.Unlock();
         assert(0);  // Should be unreachable because damaged() calls
                     // respawn()
       }
