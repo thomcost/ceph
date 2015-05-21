@@ -980,6 +980,12 @@ bool Journaler::_is_readable()
   if (read_pos == write_pos)
     return false;
 
+  // Are we errored?  Stop here to avoid risking
+  // raising decode errors.
+  if (error != 0) {
+    return false;
+  }
+
   // Check if the retrieve bytestream has enough for an entry
   uint64_t need;
   if (journal_stream.readable(read_buf, &need)) {
