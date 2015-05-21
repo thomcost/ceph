@@ -834,10 +834,11 @@ void Journaler::_finish_read(int r, uint64_t offset, bufferlist& bl)
 
   try {
     _assimilate_prefetch();
+    // Check the readable-ness of the buffer: do this head because it involves
+    // decoding, and we would like to catch any decode errors here so that
+    // external is_readable() callers don't have to.
+    _is_readable();
   } catch (const buffer::error &err) {
-    // If there is junk in the data read, the ::_is_readable call inside
-    // _assimilate_prefetch will be the first to hit it.  Subsequent
-    // calls to _is_readable don't have to worry about catching this.
     error = -EINVAL;
     if (on_readable) {
       C_OnFinisher *f = on_readable;
