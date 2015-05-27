@@ -500,8 +500,10 @@ int HashIndex::recursive_remove(const vector<string> &path) {
   r = list_objects(path, 0, 0, &objects);
   if (r < 0)
     return r;
-  if (!objects.empty())
+  if (!objects.empty()) {
+    derr << __func__ << " " << path << " not empty: " << objects << dendl;
     return -ENOTEMPTY;
+  }
   vector<string> subdir(path);
   for (set<string>::iterator i = subdirs.begin();
        i != subdirs.end();
