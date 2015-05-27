@@ -176,11 +176,14 @@ int FileStore::lfn_find(const ghobject_t& oid, const Index& index, IndexedPath *
   assert(NULL != index.index);
   r = (index.index)->lookup(oid, path, &exist);
   if (r < 0) {
+    derr << __func__ << " index lookup returns " << r << dendl;
     assert(!m_filestore_fail_eio || r != -EIO);
     return r;
   }
-  if (!exist)
+  if (!exist) {
+    derr << __func__ << " !exist" << dendl;
     return -ENOENT;
+  }
   return 0;
 }
 
