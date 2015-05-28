@@ -5059,17 +5059,22 @@ int FileStore::_destroy_collection(coll_t c)
   {
     Index from;
     int r = get_index(c, &from);
-    if (r < 0)
+    if (r < 0) {
+      derr << __func__ << " err from get_index" << dendl;
       goto out;
+    }
     assert(NULL != from.index);
     RWLock::WLocker l((from.index)->access_lock);
 
     r = from->prep_delete();
-    if (r < 0)
+    if (r < 0) {
+      derr << __func__ << " err from prep_delete" << dendl;
       goto out;
+    }
   }
   r = ::rmdir(fn);
   if (r < 0) {
+    derr << __func__ << " err from rmdir" << dendl;
     r = -errno;
     goto out;
   }
