@@ -4141,6 +4141,7 @@ bool remove_dir(
     0,
     &olist,
     &next);
+  generic_derr << __func__ << " got " << olist.size() << " next " << next << dendl;
   for (vector<ghobject_t>::iterator i = olist.begin();
        i != olist.end();
        ++i, ++num) {
@@ -4180,6 +4181,7 @@ bool remove_dir(
   delete t;
   // whether there are more objects to remove in the collection
   *finished = next.is_max();
+  generic_derr << __func__ << " finished = " << (int)*finished << dendl;
   return cont;
 }
 
