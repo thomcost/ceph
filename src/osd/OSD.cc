@@ -4204,6 +4204,11 @@ void OSD::RemoveWQ::_process(
     &finished, handle);
   if (!cont)
     return;
+  if (!finished) {
+    if (item.second->pause_clearing())
+      queue_front(item);
+    return;
+  }
 
   if (!item.second->start_deleting())
     return;

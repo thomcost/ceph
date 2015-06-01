@@ -226,7 +226,6 @@ class DeletingState {
 public:
   const spg_t pgid;
   const PGRef old_pg_state;
-  list<coll_t> colls_to_remove;
   DeletingState(const pair<spg_t, PGRef> &in) :
     lock("DeletingState::lock"), status(QUEUED), stop_deleting(false),
     pgid(in.first), old_pg_state(in.second) {
