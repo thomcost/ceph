@@ -3510,7 +3510,7 @@ void Client::add_update_cap(Inode *in, MetaSession *mds_session, uint64_t cap_id
       if (in->auth_cap && in->flushing_cap_item.is_on_list()) {
 	ldout(cct, 10) << "add_update_cap changing auth cap: "
 		       << "add myself to new auth MDS' flushing caps list" << dendl;
-	mds_session->flushing_caps.push_back(&in->flushing_cap_item);
+	adjust_session_flushing_caps(in, in->auth_cap->session, mds_session);
       }
       in->auth_cap = cap;
     }
@@ -3618,6 +3618,7 @@ void Client::remove_session_caps(MetaSession *s)
       put_inode(in);
     }
   }
+  s->flushing_caps_tids.clear();
   sync_cond.Signal();
 }
 
@@ -3763,9 +3764,25 @@ int Client::mark_caps_flushing(Inode *in, ceph_tid_t* ptid)
  
 
   session->flushing_caps.push_back(&in->flushing_cap_item);
+  session->flushing_caps_tids.insert(flush_tid);
 
   *ptid = flush_tid;
   return flushing;
+}
+
+void Client::adjust_session_flushing_caps(Inode *in, MetaSession *old_s,  MetaSession *new_s)
+{
+  ceph_tid_t last_tid = 0;
+  for (int i = 0; i < CEPH_CAP_BITS; ++i) {
+    if (!(in->flushing_caps & (1 << i)))
+      continue;
+    if (last_tid == in->flushing_cap_tid[i])
+      continue;
+    last_tid = in->flushing_cap_tid[i];
+    old_s->flushing_caps_tids.erase(last_tid);
+    new_s->flushing_caps_tids.insert(last_tid);
+  }
+  new_s->flushing_caps.push_back(&in->flushing_cap_item);
 }
 
 void Client::flush_caps()
@@ -4320,7 +4337,7 @@ void Client::handle_cap_export(MetaSession *session, Inode *in, MClientCaps *m)
 	  if (cap == in->auth_cap)
 	    in->auth_cap = tcap;
 	  if (in->auth_cap == tcap && in->flushing_cap_item.is_on_list())
-	    tsession->flushing_caps.push_back(&in->flushing_cap_item);
+	    adjust_session_flushing_caps(in, session, tsession);
 	}
       } else {
 	add_update_cap(in, tsession, m->peer.cap_id, cap->issued,
@@ -4361,6 +4378,7 @@ void Client::handle_cap_flush_ack(MetaSession *session, Inode *in, Cap *cap, MCl
   int dirty = m->get_dirty();
   int cleaned = 0;
   ceph_tid_t flush_ack_tid = m->get_client_tid();
+  session->flushing_caps_tids.erase(flush_ack_tid);
   for (int i = 0; i < CEPH_CAP_BITS; ++i) {
     if ((dirty & in->flushing_caps & (1 << i)) &&
 	(flush_ack_tid == in->flushing_cap_tid[i])) {
