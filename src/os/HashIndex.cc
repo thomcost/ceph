@@ -794,6 +794,7 @@ int HashIndex::get_path_contents_by_hash(const vector<string> &path,
   r = list_objects(path, 0, 0, &rev_objects);
   if (r < 0)
     return r;
+  generic_derr << __func__ << " rev_objects " << rev_objects << dendl;
   for (map<string, ghobject_t>::iterator i = rev_objects.begin();
        i != rev_objects.end();
        ++i) {
@@ -822,6 +823,7 @@ int HashIndex::get_path_contents_by_hash(const vector<string> &path,
       continue;
     hash_prefixes->insert(cur_prefix + *i);
   }
+  generic_derr << __func__ << " result " << *objects << dendl;
   return 0;
 }
 
