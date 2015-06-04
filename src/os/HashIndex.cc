@@ -143,7 +143,10 @@ int HashIndex::col_split_level(
        i != objects.end();
        ++i) {
     if (i->second.match(inbits, match)) {
+      generic_derr << __func__ << " moving " << i->second << dendl;
       objs_to_move.insert(*i);
+    } else {
+      generic_derr << __func__ << " NOT moving " << i->second << dendl;
     }
   }
 
@@ -212,7 +215,6 @@ int HashIndex::col_split_level(
     if (r < 0)
       return r;
   }
-       
 
   r = to.set_info(path, to_info);
   if (r < 0)
@@ -222,6 +224,7 @@ int HashIndex::col_split_level(
     return r;
   from.end_split_or_merge(path);
   to.end_split_or_merge(path);
+
   return 0;
 }
 
@@ -231,13 +234,16 @@ int HashIndex::_split(
   CollectionIndex* dest) {
   assert(collection_version() == dest->collection_version());
   unsigned mkdirred = 0;
-  return col_split_level(
+  generic_derr << __func__ << " " << coll() << " start" << dendl;
+  int r = col_split_level(
     *this,
     *static_cast<HashIndex*>(dest),
     vector<string>(),
     bits,
     match,
     &mkdirred);
+  generic_derr << __func__ << " " << coll() << " end = " << r << dendl;
+  return r;
 }
 
 int HashIndex::_init() {
@@ -305,11 +311,15 @@ int HashIndex::_lookup(const ghobject_t &oid,
   int exists;
   while (1) {
     int r = path_exists(*path, &exists);
-    if (r < 0)
+    if (r < 0) {
+      generic_derr << __func__ << " " << oid << " path_exists = " << r << dendl;
       return r;
+    }
     if (!exists) {
-      if (path->empty())
+      if (path->empty()) {
+	generic_derr << __func__ << " " << oid << " path empty" << dendl;
 	return -ENOENT;
+      }
       path->pop_back();
       break;
     }
@@ -500,10 +510,8 @@ int HashIndex::recursive_remove(const vector<string> &path) {
   r = list_objects(path, 0, 0, &objects);
   if (r < 0)
     return r;
-  if (!objects.empty()) {
-    derr << __func__ << " " << path << " not empty: " << objects << dendl;
+  if (!objects.empty())
     return -ENOTEMPTY;
-  }
   vector<string> subdir(path);
   for (set<string>::iterator i = subdirs.begin();
        i != subdirs.end();
