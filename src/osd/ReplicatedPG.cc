@@ -4117,6 +4117,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       ++ctx->num_write;
       {
 	tracepoint(osd, do_osd_op_pre_setallochint, soid.oid.name.c_str(), soid.snap.val, op.alloc_hint.expected_object_size, op.alloc_hint.expected_write_size);
+        // XXX: Use get_min_peer_features()?
         if (!(get_min_peer_features() & CEPH_FEATURE_OSD_SET_ALLOC_HINT)) { 
           result = -EOPNOTSUPP;
           break;

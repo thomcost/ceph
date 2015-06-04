@@ -215,7 +215,9 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   active_pushes(0),
   recovery_state(this),
   pg_id(p),
-  peer_features(CEPH_FEATURES_SUPPORTED_DEFAULT)
+  peer_features(CEPH_FEATURES_SUPPORTED_DEFAULT),
+  acting_features(CEPH_FEATURES_SUPPORTED_DEFAULT),
+  upacting_features(CEPH_FEATURES_SUPPORTED_DEFAULT)
 {
 #ifdef PG_DEBUG_REFS
   osd->add_pgid(p, this);
@@ -1326,6 +1328,7 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id)
   // We go incomplete if below min_size for ec_pools since backfill
   // does not currently maintain rollbackability
   // Otherwise, we will go "peered", but not "active"
+  // XXX: Use get_min_peer_features()?
   if (num_want_acting < pool.info.min_size &&
       (pool.info.ec_pool() ||
        (!(get_min_peer_features() & CEPH_FEATURE_OSD_MIN_SIZE_RECOVERY)) ||
@@ -3964,7 +3967,8 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 	  osd->clog->info(oss);
 	}
 
-	if (peer_features & CEPH_FEATURE_OSD_OBJECT_DIGEST)
+        // XXX: Why not get_min_upacting_features()?
+	if (get_min_acting_features() & CEPH_FEATURE_OSD_OBJECT_DIGEST)
 	  scrubber.seed = -1; // better, and enables oi digest checks
 	else
 	  scrubber.seed = 0;  // compat
@@ -4213,7 +4217,8 @@ void PG::scrub_compare_maps()
     }
 
     // can we relate scrub digests to oi digests?
-    bool okseed = (get_min_peer_features() & CEPH_FEATURE_OSD_OBJECT_DIGEST);
+    // XXX: Why not get_min_upacting_features()?
+    bool okseed = (get_min_acting_features() & CEPH_FEATURE_OSD_OBJECT_DIGEST);
     assert(okseed == (scrubber.seed == 0xffffffff));
 
     get_pgbackend()->be_compare_scrubmaps(
@@ -6859,7 +6864,7 @@ PG::RecoveryState::GetInfo::GetInfo(my_context ctx)
   if (!prior_set.get())
     pg->build_prior(prior_set);
 
-  pg->reset_peer_features();
+  pg->reset_all_min_features();
   get_infos();
   if (peer_info_requested.empty() && !prior_set->pg_down) {
     post_event(GotInfo());
@@ -6935,9 +6940,21 @@ boost::statechart::result PG::RecoveryState::GetInfo::react(const MNotifyRec& in
       }
       get_infos();
     }
-    dout(20) << "Adding osd: " << infoevt.from.osd << " features: "
+    dout(20) << "Adding osd: " << infoevt.from.osd << " peer features: "
       << hex << infoevt.features << dec << dendl;
     pg->apply_peer_features(infoevt.features);
+
+    if (std::find(pg->acting.begin(), pg->acting.end(), infoevt.from.osd) != pg->acting.end()) {
+      dout(20) << "Adding osd: " << infoevt.from.osd << " acting features: "
+	<< hex << infoevt.features << dec << dendl;
+      pg->apply_acting_features(infoevt.features);
+
+      if (std::find(pg->up.begin(), pg->up.end(), infoevt.from.osd) != pg->up.end()) {
+	dout(20) << "Adding osd: " << infoevt.from.osd << " upacting features: "
+	  << hex << infoevt.features << dec << dendl;
+	pg->apply_upacting_features(infoevt.features);
+      }
+    }
 
     // are we done getting everything?
     if (peer_info_requested.empty() && !prior_set->pg_down) {
@@ -6996,7 +7013,9 @@ boost::statechart::result PG::RecoveryState::GetInfo::react(const MNotifyRec& in
 	  break;
 	}
       }
-      dout(20) << "Common features: " << hex << pg->get_min_peer_features() << dec << dendl;
+      dout(20) << "Common peer features: " << hex << pg->get_min_peer_features() << dec << dendl;
+      dout(20) << "Common acting features: " << hex << pg->get_min_acting_features() << dec << dendl;
+      dout(20) << "Common upacting features: " << hex << pg->get_min_upacting_features() << dec << dendl;
       post_event(GotInfo());
     }
   }
