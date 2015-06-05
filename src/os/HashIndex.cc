@@ -640,6 +640,7 @@ int HashIndex::complete_split(const vector<string> &path, subdir_info_s info) {
   map<string, ghobject_t> objects;
   vector<string> dst = path;
   int r;
+  generic_derr << __func__ << " " << coll() << " path " << path << dendl;
   dst.push_back("");
   r = list_objects(path, 0, 0, &objects);
   if (r < 0)
@@ -648,6 +649,8 @@ int HashIndex::complete_split(const vector<string> &path, subdir_info_s info) {
   r = list_subdirs(path, &subdirs);
   if (r < 0)
     return r;
+  generic_derr << " objects " << objects << dendl;
+  generic_derr << " subdirs " << subdirs << dendl;
   map<string, map<string, ghobject_t> > mapped;
   map<string, ghobject_t> moved;
   int num_moved = 0;
@@ -656,6 +659,8 @@ int HashIndex::complete_split(const vector<string> &path, subdir_info_s info) {
        ++i) {
     vector<string> new_path;
     get_path_components(i->second, &new_path);
+    generic_derr << " map " << i->second << " to " << new_path
+		 << " f " << i->first << dendl;
     mapped[new_path[level]][i->first] = i->second;
   }
   for (map<string, map<string, ghobject_t> >::iterator i = mapped.begin();
@@ -690,6 +695,7 @@ int HashIndex::complete_split(const vector<string> &path, subdir_info_s info) {
     // Subdir doesn't yet exist
     if (!subdirs.count(i->first)) {
       info.subdirs += 1;
+      generic_derr << " craate_path " << dst << dendl;
       r = create_path(dst);
       if (r < 0)
 	return r;
@@ -701,6 +707,8 @@ int HashIndex::complete_split(const vector<string> &path, subdir_info_s info) {
       moved[j->first] = j->second;
       num_moved++;
       objects.erase(j->first);
+      generic_derr << " link_object " << path << " dst " << dst
+		   << " ob " << j->second << " .. " << j->first << dendl;
       r = link_object(path, dst, j->second, j->first);
       // May be a partially finished split
       if (r < 0 && r != -EEXIST) {
