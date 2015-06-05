@@ -548,23 +548,19 @@ ostream& operator<<(ostream& out, const pg_t &pg)
 
 // -- coll_t --
 
-void coll_t::calc_str()
+std::string coll_t::to_str() const
 {
   switch (type) {
   case TYPE_META:
-    _str = "meta";
-    break;
+    return "meta";
   case TYPE_PG:
-    _str = stringify(pgid) + "_head";
-    break;
+    return stringify(pgid) + "_head";
   case TYPE_PG_TEMP:
-    _str = stringify(pgid) + "_TEMP";
-    break;
+    return stringify(pgid) + "_TEMP";
   case TYPE_PG_REMOVAL:
-    _str = string("FORREMOVAL_") +
+    return string("FORREMOVAL_") +
       stringify(removal_seq) + "_" +
       stringify(pgid);
-    break;
   default:
     assert(0 == "unknown collection type");
   }
@@ -576,24 +572,18 @@ bool coll_t::parse(const std::string& s)
     type = TYPE_META;
     pgid = spg_t();
     removal_seq = 0;
-    calc_str();
-    assert(s == _str);
     return true;
   }
   if (s.find("_head") == s.length() - 5 &&
       pgid.parse(s.substr(0, s.length() - 5))) {
     type = TYPE_PG;
     removal_seq = 0;
-    calc_str();
-    assert(s == _str);
     return true;
   }
   if (s.find("_TEMP") == s.length() - 5 &&
       pgid.parse(s.substr(0, s.length() - 5))) {
     type = TYPE_PG_TEMP;
     removal_seq = 0;
-    calc_str();
-    assert(s == _str);
     return true;
   }
   if (s.find("FORREMOVAL_") == 0) {
@@ -609,8 +599,6 @@ bool coll_t::parse(const std::string& s)
       assert(0);
       return false;
     }
-    calc_str();
-    assert(s == _str);
     return true;
   }
   return false;

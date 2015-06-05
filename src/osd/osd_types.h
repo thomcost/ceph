@@ -489,38 +489,19 @@ class coll_t {
   spg_t pgid;
   uint64_t removal_seq;  // note: deprecated, not encoded
 
-  string _str;  // cached string
-
-  void calc_str();
-
-  coll_t(type_t t, spg_t p, uint64_t r)
-    : type(t), pgid(p), removal_seq(r) {
-    calc_str();
-  }
-
 public:
   coll_t() : type(TYPE_META), removal_seq(0)
-  {
-    calc_str();
-  }
+  { }
 
   coll_t(const coll_t& other)
-    : type(other.type), pgid(other.pgid), removal_seq(other.removal_seq) {
-    calc_str();
-  }
+    : type(other.type), pgid(other.pgid), removal_seq(other.removal_seq) {}
 
   explicit coll_t(spg_t pgid)
     : type(TYPE_PG), pgid(pgid)
-  {
-    calc_str();
-  }
+  { }
 
-  const std::string& to_str() const {
-    return _str;
-  }
-  const char *c_str() const {
-    return _str.c_str();
-  }
+  std::string to_str() const;
+
   bool parse(const std::string& s);
 
   int operator<(const coll_t &rhs) const {
@@ -581,9 +562,12 @@ public:
 
   // get a TEMP collection that corresponds to the current collection,
   // which we presume is a pg collection.
-  coll_t get_temp() const {
+  coll_t get_temp() {
     assert(type == TYPE_PG);
-    return coll_t(TYPE_PG_TEMP, pgid, 0);
+    coll_t other;
+    other.type = TYPE_PG_TEMP;
+    other.pgid = pgid;
+    return other;
   }
 
   void dump(Formatter *f) const;
