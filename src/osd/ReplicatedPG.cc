@@ -481,10 +481,21 @@ bool ReplicatedPG::maybe_await_blocked_snapset(
   const hobject_t &hoid,
   OpRequestRef op)
 {
+  // order this op as a write?
+  bool write_black =
+       (pool.info.cache_mode == pg_pool_t::CACHEMODE_WRITEBACK);
+
+  bool write_ordered =
+    !hit_set ||
+    op->need_promote() ||
+    op->may_write() ||
+    op->may_cache() ||
+    op->may_read_ordered();
+
   ObjectContextRef obc;
   obc = object_contexts.lookup(hoid.get_head());
   if (obc) {
-    if (obc->is_blocked()) {
+    if (obc->is_write_blocked() || (obc->is_blocked() && (write_ordered || !write_black))) {
       wait_for_blocked_object(obc->obs.oi.soid, op);
       return true;
     } else {
@@ -493,7 +504,7 @@ bool ReplicatedPG::maybe_await_blocked_snapset(
   }
   obc = object_contexts.lookup(hoid.get_snapdir());
   if (obc) {
-    if (obc->is_blocked()) {
+    if (obc->is_write_blocked() || (obc->is_blocked() && (write_ordered || !write_black))) {
       wait_for_blocked_object(obc->obs.oi.soid, op);
       return true;
     } else {
@@ -2210,7 +2221,7 @@ void ReplicatedPG::promote_object(ObjectContextRef obc,
 	     CEPH_OSD_COPY_FROM_FLAG_IGNORE_CACHE |
 	     CEPH_OSD_COPY_FROM_FLAG_MAP_SNAP_CLONE,
 	     obc->obs.oi.soid.snap == CEPH_NOSNAP,
-	     src_fadvise_flags, 0);
+	     src_fadvise_flags, 0, op);
 
   assert(obc->is_blocked());
 
@@ -5074,7 +5085,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 		     op.copy_from.flags,
 		     false,
 		     op.copy_from.src_fadvise_flags,
-		     op.flags);
+		     op.flags,
+                     ctx->op);
 	  result = -EINPROGRESS;
 	} else {
 	  // finish
@@ -6156,7 +6168,8 @@ void ReplicatedPG::start_copy(CopyCallback *cb, ObjectContextRef obc,
 			      version_t version, unsigned flags,
 			      bool mirror_snapset,
 			      unsigned src_obj_fadvise_flags,
-			      unsigned dest_obj_fadvise_flags)
+			      unsigned dest_obj_fadvise_flags,
+			      OpRequestRef op)
 {
   const hobject_t& dest = obc->obs.oi.soid;
   dout(10) << __func__ << " " << dest
@@ -6180,7 +6193,11 @@ void ReplicatedPG::start_copy(CopyCallback *cb, ObjectContextRef obc,
 			   mirror_snapset, src_obj_fadvise_flags,
 			   dest_obj_fadvise_flags));
   copy_ops[dest] = cop;
-  obc->start_block();
+  if (!op || (op->may_read() && !op->may_write() &&
+      !op->may_cache() && !op->may_read_ordered()))
+    obc->start_read_block();
+  else
+    obc->start_write_block();
 
   _copy_some(obc, cop);
 }
@@ -6893,7 +6910,7 @@ int ReplicatedPG::start_flush(
   }
 
   if (blocking)
-    obc->start_block();
+    obc->start_write_block();
 
   map<hobject_t,FlushOpRef>::iterator p = flush_ops.find(soid);
   if (p != flush_ops.end()) {
