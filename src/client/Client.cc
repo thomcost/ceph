@@ -3613,8 +3613,10 @@ void Client::remove_session_caps(MetaSession *s)
     signal_cond_list(in->waitfor_caps);
     if (dirty_caps) {
       lderr(cct) << "remove_session_caps still has dirty|flushing caps on " << *in << dendl;
-      if (in->flushing_caps)
+      if (in->flushing_caps) {
 	num_flushing_caps--;
+	in->flushing_cap_tid.clear();
+      }
       in->flushing_caps = 0;
       in->dirty_caps = 0;
       put_inode(in);
@@ -3793,20 +3795,21 @@ void Client::flush_caps(Inode *in, MetaSession *session)
 	   (cap->issued | cap->implemented), in->flushing_caps);
 }
 
-void Client::wait_sync_caps(Inode *in, uint16_t flush_tid[])
+void Client::wait_sync_caps(Inode *in, ceph_tid_t want)
 {
-retry:
-  for (int i = 0; i < CEPH_CAP_BITS; ++i) {
-    if (!(in->flushing_caps & (1 << i)))
+  for (int i = 0; i < CEPH_CAP_BITS; ) {
+    if (!(in->flushing_caps & (1 << i))) {
+      ++i;
       continue;
-    // handle uint16_t wrapping
-    if ((int16_t)(in->flushing_cap_tid[i] - flush_tid[i]) <= 0) {
+    }
+    if (in->flushing_cap_tid[i] <= want) {
       ldout(cct, 10) << "wait_sync_caps on " << *in << " flushing "
-		     << ccap_string(1 << i) << " want " << flush_tid[i]
+		     << ccap_string(1 << i) << " want " << want
 		     << " last " << in->flushing_cap_tid[i] << dendl;
       wait_on_list(in->waitfor_caps);
-      goto retry;
+      continue;
     }
+    ++i;
   }
 }
 
@@ -4343,11 +4346,13 @@ void Client::handle_cap_flush_ack(MetaSession *session, Inode *in, Cap *cap, MCl
   mds_rank_t mds = session->mds_num;
   int dirty = m->get_dirty();
   int cleaned = 0;
-  uint16_t flush_ack_tid = static_cast<uint16_t>(m->get_client_tid());
+  ceph_tid_t flush_ack_tid = m->get_client_tid();
   for (int i = 0; i < CEPH_CAP_BITS; ++i) {
-    if ((dirty & (1 << i)) &&
-	(flush_ack_tid == in->flushing_cap_tid[i]))
+    if ((dirty & in->flushing_caps & (1 << i)) &&
+	(flush_ack_tid == in->flushing_cap_tid[i])) {
+      in->flushing_cap_tid.erase(i);
       cleaned |= 1 << i;
+    }
   }
 
   ldout(cct, 5) << "handle_cap_flush_ack mds." << mds
@@ -7726,7 +7731,6 @@ int Client::_fsync(Fh *f, bool syncdataonly)
   int r = 0;
 
   Inode *in = f->inode;
-  uint16_t wait_on_flush[CEPH_CAP_BITS];
   bool flushed_metadata = false;
   Mutex lock("Client::_fsync::lock");
   Cond cond;
@@ -7744,10 +7748,8 @@ int Client::_fsync(Fh *f, bool syncdataonly)
   
   if (!syncdataonly && (in->dirty_caps & ~CEPH_CAP_ANY_FILE_WR)) {
     check_caps(in, true);
-    if (in->flushing_caps) {
+    if (in->flushing_caps)
       flushed_metadata = true;
-      memcpy(wait_on_flush, in->flushing_cap_tid, sizeof(wait_on_flush));
-    }
   } else ldout(cct, 10) << "no metadata needs to commit" << dendl;
 
   if (object_cacher_completion) { // wait on a real reply instead of guessing
@@ -7786,7 +7788,7 @@ int Client::_fsync(Fh *f, bool syncdataonly)
 
   if (!r) {
     if (flushed_metadata)
-      wait_sync_caps(in, wait_on_flush);
+      wait_sync_caps(in, in->last_flush_tid);
 
     ldout(cct, 10) << "ino " << in->ino << " has no uncommitted writes" << dendl;
   } else {
