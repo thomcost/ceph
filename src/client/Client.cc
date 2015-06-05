@@ -174,7 +174,7 @@ Client::Client(Messenger *m, MonClient *mc)
     tick_event(NULL),
     monclient(mc), messenger(m), whoami(m->get_myname().num()),
     cap_epoch_barrier(0),
-    last_tid(0), oldest_tid(0), last_flush_seq(0),
+    last_tid(0), oldest_tid(0), last_flush_seq(0), last_flush_tid(0),
     initialized(false), authenticated(false),
     mounted(false), unmounting(false),
     local_osd(-1), local_osd_epoch(0),
@@ -2949,7 +2949,7 @@ void Client::send_cap(Inode *in, MetaSession *session, Cap *cap,
   snapid_t follows = 0;
 
   if (flush) {
-    flush_tid = ++in->last_flush_tid;
+    flush_tid = last_flush_tid;
     for (int i = 0; i < CEPH_CAP_BITS; ++i) {
       if (flush & (1<<i))
 	in->flushing_cap_tid[i] = flush_tid;
@@ -3228,7 +3228,7 @@ void Client::flush_snaps(Inode *in, bool all_again, CapSnap *again)
     
     in->auth_cap->session->flushing_capsnaps.push_back(&capsnap->flushing_item);
 
-    capsnap->flush_tid = ++in->last_flush_tid;
+    capsnap->flush_tid = ++last_flush_tid;
     MClientCaps *m = new MClientCaps(CEPH_CAP_OP_FLUSHSNAP, in->ino, in->snaprealm->ino, 0, mseq,
         cap_epoch_barrier);
     m->set_client_tid(capsnap->flush_tid);
@@ -7788,7 +7788,7 @@ int Client::_fsync(Fh *f, bool syncdataonly)
 
   if (!r) {
     if (flushed_metadata)
-      wait_sync_caps(in, in->last_flush_tid);
+      wait_sync_caps(in, last_flush_tid);
 
     ldout(cct, 10) << "ino " << in->ino << " has no uncommitted writes" << dendl;
   } else {
